@@ -1,7 +1,7 @@
 # manazashi
 
 ## 1.前処理 (preprocessingフォルダ)
-ffmpegを使用して動画から静止画を切り出すプログラム
+ffmpegを使用して動画から静止画を切り出すプログラム (ffmpegのインストールが必要)
 #### 1.preprocessing/split_video.py
 ```
 --input -s 入力ファイル(.mp4 or .m4v)
