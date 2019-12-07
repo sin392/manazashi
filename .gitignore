@@ -1,3 +1,6 @@
 .vscode
 .png
 data
+
+# ---- 露木の追記 PyCharmの設定を非共有化 ---- #
+.idea
