@@ -1,7 +1,7 @@
 # manazashi
 
 ## 0.データ
-動画は以下
+動画は以下  
 https://teams.microsoft.com/_#/school/files/%E4%B8%80%E8%88%AC?threadId=19%3A53f497dfc6b240b9b0a4434cb00db9d2%40thread.skype&ctx=channel&context=DCON2020%252Fmanazashi
 
 ## 1.前処理 (preprocessingフォルダ)
