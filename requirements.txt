@@ -6,3 +6,4 @@ pytorch
 torchvision
 matplotlib
 Cython
+addict

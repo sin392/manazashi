@@ -5,7 +5,7 @@ import time
 from torch.multiprocessing import Pool
 import sys
 
-sys.path.append("/home/shimine/face/M2Det")
+sys.path.append("./M2Det")
 from utils.nms_wrapper import nms
 from utils.timer import Timer
 from configs.CC import Config
@@ -23,9 +23,9 @@ import matplotlib.pyplot as plt
 import torch
 
 parser = argparse.ArgumentParser(description='M2Det Testing')
-parser.add_argument('-c', '--config', default='configs/m2det320_vgg.py', type=str)
+parser.add_argument('-c', '--config', default='M2Det/configs/m2det320_vgg.py', type=str)
 parser.add_argument('-f', '--directory', default='imgs/', help='the path to demo images')
-parser.add_argument('-m', '--trained_model', default=None, type=str, help='Trained state_dict file path to open')
+parser.add_argument('-m', '--trained_model', default=None, type=str, default='weights/m2det512_vgg.pth', help='Trained state_dict file path to open')
 parser.add_argument('--video', default=False, type=bool, help='videofile mode')
 parser.add_argument('--cam', default=-1, type=int, help='camera device id')
 parser.add_argument('--show', action='store_true', help='Whether to display the images')
