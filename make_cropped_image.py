@@ -140,7 +140,8 @@ def get_iou(a, b):
     return iou
 
 def crop_person(image, rect):
-    rect = list(map(int, rect))
+    # 負値が出る場合があり、挙動がおかしくなるのでカット
+    rect = [x if x >= 0 else 0 for x in list(map(int, rect))]
     im = np.asarray(image)
     im = im[rect[1]:rect[3]+1, rect[0]:rect[2]+1]
     return im
@@ -163,9 +164,14 @@ if cam >= 0 or video:
     video_name = os.path.splitext(video_path)
     fourcc = cv2.VideoWriter_fourcc('m','p','4','v')
     out_video = cv2.VideoWriter(video_name[0] + '_m2det.mp4', fourcc, capture.get(cv2.CAP_PROP_FPS), (int(capture.get(cv2.CAP_PROP_FRAME_WIDTH)), int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))))
-im_fnames = sorted((fname for fname in os.listdir(im_path) if os.path.splitext(fname)[-1] == '.jpg'))
-im_fnames = (os.path.join(im_path, fname) for fname in im_fnames)
+im_fnames = sorted((fname for fname in os.listdir(im_path) if os.path.splitext(fname)[-1] == '.jpg' or os.path.splitext(fname)[-1] == '.png'))
+
+im_fnames = (os.path.join(im_path, fname) for fname in im_fnames[451:])
+
 im_iter = iter(im_fnames)
+
+# print(list(im_fnames))
+
 while True:
     if cam < 0 and not video:
         try:
@@ -174,12 +180,14 @@ while True:
             break
         if 'm2det' in fname: continue # ignore the detected images
         image = cv2.imread(fname, cv2.IMREAD_COLOR)
+
     else:
         ret, image = capture.read()
         if not ret:
             cv2.destroyAllWindows()
             capture.release()
             break
+    print(fname)
     loop_start = time.time()
     w,h = image.shape[1],image.shape[0]
     img = _preprocess(image).unsqueeze(0)
@@ -240,63 +248,19 @@ while True:
     fps = 1.0 / float(loop_time) if cam >= 0 or video else -1
 
     ##############################################################################
-    # face_net
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    mtcnn = MTCNN(image_size=512, margin=0, keep_all=True, device=device)
-
     im = Image.open(fname)
-    face_rects, probs, landmarks = mtcnn.detect(im, landmarks=True)
-
-    match_idx_list = []
-    for i in range(len(face_rects)):
-        for j in range(len(boxes)):
-            # area_aに対する重なり部の割合を返す。
-            iou = get_iou(face_rects[i], boxes[j])
-            # print(face_rects[i], boxes[j], iou)
-            if 0.5 < iou:
-                match_idx_list.append(j)
 
     if args.crop == True:
         if not os.path.exists('cropped'):
             os.mkdir('cropped')
         for i in range(len(boxes)):
             cropped_im = crop_person(im, boxes[i])
-            cropped_im = cv2.cvtColor(cropped_im, cv2.COLOR_RGB2BGR)
+            try:
+                cropped_im = cv2.cvtColor(cropped_im, cv2.COLOR_RGB2BGR)
+            except:
+                print(boxes[i])
+                print(im.size)
+                print(cropped_im.shape)
+                
             fname_c = os.path.basename(fname.split(".")[0])
             cv2.imwrite(f"cropped/{fname_c}_person_{i}.jpg", cropped_im)
-
-    print(match_idx_list)
-    im2show = draw_detection(image, boxes, scores, cls_inds, fps, match_idx_list=match_idx_list)
-    # im2show = draw_detection(image, boxes, scores, cls_inds, fps)
-    # print bbox_pred.shape, iou_pred.shape, prob_pred.shape
-
-    person_num = len(boxes)
-    face_num = len(face_rects)
-    pf_rate = face_num / person_num * 100
-    print(person_num, face_num, pf_rate)
-
-    cv2.putText(im2show, f'face/person : {pf_rate:.2f}%', (20, 60), cv2.FONT_HERSHEY_COMPLEX, 2, (100, 255, 100), 5, cv2.LINE_AA)
-
-    for i, rect in enumerate(face_rects):
-        rect = tuple(map(int, rect.tolist()))
-        cv2.rectangle(im2show, pt1=rect[:2], pt2=rect[2:], color=(0,255,0))
-        for landmark in landmarks[i]:
-            cv2.drawMarker(im2show, tuple(map(int, landmark.tolist())), (0,0,255), markerSize=10)
-
-    if im2show.shape[0] > 1100:
-        im2show = cv2.resize(im2show,
-                             (int(1000. * float(im2show.shape[1]) / im2show.shape[0]), 1000))
-    if args.show:
-        cv2.imshow('test', im2show)
-        if cam < 0 and not video:
-            cv2.waitKey(5000)
-        else:
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                cv2.destroyAllWindows()
-                out_video.release()
-                capture.release()
-                break
-    if cam < 0 and not video:
-        cv2.imwrite('{}_m2det_facenet.jpg'.format(fname.split('.')[0]), im2show)
-    else:
-        out_video.write(im2show)
