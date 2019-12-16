@@ -5,7 +5,7 @@ import time
 from torch.multiprocessing import Pool
 import sys
 
-sys.path.append("/home/shimine/face/M2Det")
+sys.path.append("M2Det")
 from utils.nms_wrapper import nms
 from utils.timer import Timer
 from configs.CC import Config
@@ -23,12 +23,13 @@ import matplotlib.pyplot as plt
 import torch
 
 parser = argparse.ArgumentParser(description='M2Det Testing')
-parser.add_argument('-c', '--config', default='configs/m2det320_vgg.py', type=str)
+parser.add_argument('-c', '--config', default='M2Det/configs/m2det512_vgg.py', type=str)
 parser.add_argument('-f', '--directory', default='imgs/', help='the path to demo images')
-parser.add_argument('-m', '--trained_model', default=None, type=str, help='Trained state_dict file path to open')
+parser.add_argument('-m', '--trained_model', default='weights/m2det512_vgg.pth', type=str, help='Trained state_dict file path to open')
 parser.add_argument('--video', default=False, type=bool, help='videofile mode')
 parser.add_argument('--cam', default=-1, type=int, help='camera device id')
 parser.add_argument('--show', action='store_true', help='Whether to display the images')
+parser.add_argument('--crop', action='store_true', help='Crop Bbox of Person Class')
 args = parser.parse_args()
 
 print_info(' ----------------------------------------------------------------------\n'
@@ -137,6 +138,12 @@ def get_iou(a, b):
 
     return iou
 
+def crop_person(image, rect):
+    rect = list(map(int, rect))
+    im = np.asarray(image)
+    im = im[rect[1]:rect[3]+1, rect[0]:rect[2]+1]
+    return im
+
 im_path = args.directory
 cam = args.cam
 video = args.video
@@ -244,9 +251,17 @@ while True:
         for j in range(len(boxes)):
             # area_aに対する重なり部の割合を返す。
             iou = get_iou(face_rects[i], boxes[j])
-            print(face_rects[i], boxes[j], iou)
+            # print(face_rects[i], boxes[j], iou)
             if 0.5 < iou:
                 match_idx_list.append(j)
+
+    if args.crop == True:
+        if not os.path.exists('cropped'):
+            os.mkdir('cropped')
+        for i in range(len(boxes)):
+            cropped_im = crop_person(im, boxes[i])
+            cropped_im = cv2.cvtColor(cropped_im, cv2.COLOR_RGB2BGR)
+            cv2.imwrite(f"cropped/person_{i}.png", cropped_im)
 
     print(match_idx_list)
     im2show = draw_detection(image, boxes, scores, cls_inds, fps, match_idx_list=match_idx_list)
