@@ -166,7 +166,7 @@ if cam >= 0 or video:
     out_video = cv2.VideoWriter(video_name[0] + '_m2det.mp4', fourcc, capture.get(cv2.CAP_PROP_FPS), (int(capture.get(cv2.CAP_PROP_FRAME_WIDTH)), int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))))
 im_fnames = sorted((fname for fname in os.listdir(im_path) if os.path.splitext(fname)[-1] == '.jpg' or os.path.splitext(fname)[-1] == '.png'))
 
-im_fnames = (os.path.join(im_path, fname) for fname in im_fnames[451:])
+im_fnames = (os.path.join(im_path, fname) for fname in im_fnames)
 
 im_iter = iter(im_fnames)
 
