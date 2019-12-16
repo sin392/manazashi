@@ -49,7 +49,9 @@ if __name__ == "__main__":
     if not os.path.exists("weights"): os.mkdir("weights")
 
     if not os.path.exists("weights/m2det512_vgg.pth"):
-        file_id = 'https://drive.google.com/file/d/1NM1UDdZnwHwiNDxhcP-nndaWj24m-90L/view'
-        destination = 'weights/m2det512_vgg.pth'
-        download_file_from_google_drive(file_id, destination)
+        # 正常にDLできないのでひとまずは手動でDLすること
+
+        # file_id = 'https://drive.google.com/file/d/1NM1UDdZnwHwiNDxhcP-nndaWj24m-90L/view'
+        # destination = 'weights/m2det512_vgg.pth'
+        # download_file_from_google_drive(file_id, destination)
 
