@@ -5,5 +5,8 @@ pillow
 pytorch
 torchvision
 matplotlib
+
+# for M2Det
 Cython
 addict
+termcolor
