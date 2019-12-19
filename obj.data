@@ -1,0 +1,5 @@
+classes = 1
+train  = face/train_small.txt
+valid  = face/test_small.txt
+names = cfg/obj.names
+backup = backup/
