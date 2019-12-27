@@ -1,6 +1,16 @@
 .vscode
-.png
+*.png
+*.jpg
+*.PNG
+*.JPG
 data
+/facenet_pytorch
+/M2Det
+/weights
+
+!sample.png
+
+
 
 # ---- 露木の追記 PyCharmの設定を非共有化 ---- #
 .idea

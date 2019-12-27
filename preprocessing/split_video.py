@@ -13,7 +13,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input', type=str, help='specify Image folder directory')
     parser.add_argument('-o', '--output', help='Directory to output the result')
-    parser.add_argument('-r', '--rate', type=int, default=3)
+    parser.add_argument('-r', '--rate', type=int, default=1)
     parser.add_argument('-s', '--size', type=int, default=224)
     args = parser.parse_args()
 
