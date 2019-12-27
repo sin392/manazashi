@@ -53,4 +53,9 @@ if __name__ == "__main__":
 
         # file_id = 'https://drive.google.com/file/d/1NM1UDdZnwHwiNDxhcP-nndaWj24m-90L/view'
         # destination = 'weights/m2det512_vgg.pth'
+<<<<<<< HEAD
         # download_file_from_google_drive(file_id, destination)
+=======
+        # download_file_from_google_drive(file_id, destination)
+
+>>>>>>> origin/master
