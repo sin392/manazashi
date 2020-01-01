@@ -6,12 +6,14 @@ __pycache__
 /Dataset
 /weights
 /cropped
+preprocessing/input
+preprocessing/output
 
 *.png
-*.jpg
 *.PNG
+*.jpg
 *.JPG
 
 !sample.png
-!weights/*.pt
-!weights/m2det512_vgg.pth
+# !weights/*.pt
+# !weights/m2det512_vgg.pth
