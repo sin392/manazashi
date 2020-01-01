@@ -4,7 +4,7 @@ import numpy as np
 import os
 from collections.abc import Iterable
 
-from utils import detect_face, extract_face
+from utils_ import detect_face, extract_face
 
 
 class PNet(nn.Module):

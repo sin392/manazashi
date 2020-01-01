@@ -8,7 +8,7 @@ import torch
 from torch.multiprocessing import Pool
 import sys
 
-# sys.path.append("./M2Det")
+sys.path.append("M2Det")
 from M2Det.configs.CC import Config
 from M2Det.layers.functions import Detect, PriorBox
 from M2Det.m2det import build_net
@@ -60,23 +60,22 @@ class PersonFaceDetector():
         net = build_net('test',
                     size = cfg.model.input_size,
                     config = cfg.model.m2det_config)
-        init_net(net, cfg, weight)
         net.eval()
         with torch.no_grad():
             priors = priorbox.forward()
+            net = net.to(self.device)
+            priors = priors.to(self.device)
             if self.device == "cuda":
-                net = net.cuda()
-                priors = priors.cuda()
                 cudnn.benchmark = True
-            else:
-                net = net.cpu()
+        init_net(net, cfg, weight, self.device)
+
         self.priors = priors
         self.cfg = cfg
         self._preprocess = BaseTransform(cfg.model.input_size, cfg.model.rgb_means, (2, 0, 1))
         self.detector = Detect(cfg.model.m2det_config.num_classes, cfg.loss.bkg_label, anchor_config)
         self.m2det = net
         # facenet
-        self.mtcnn = MTCNN(image_size=512, margin=0, keep_all=True, device=self.device)
+        self.mtcnn = MTCNN(image_size=512, margin=0, thresholds=[0.5, 0.6, 0.6], keep_all=True, device=self.device)
 
         self.person_list = []
         self.face_list = []

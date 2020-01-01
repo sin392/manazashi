@@ -6,7 +6,6 @@ from torch.multiprocessing import Pool
 import sys
 
 from PIL import Image, ImageDraw
-from utils import MTCNN
 import torchvision.transforms as T
 import matplotlib.pyplot as plt
 import torch
@@ -17,7 +16,7 @@ from M2Det.configs.CC import Config
 
 parser = argparse.ArgumentParser(description='M2Det Testing')
 parser.add_argument('-c', '--config', default='M2Det/configs/m2det512_vgg.py', type=str)
-parser.add_argument('-f', '--directory', default='imgs/', help='the path to demo images')
+parser.add_argument('-f', '--directory', default='sample.png', help='the path to demo images')
 parser.add_argument('-m', '--trained_model', default='weights/m2det512_vgg.pth', type=str, help='Trained state_dict file path to open')
 parser.add_argument('--video', default=False, type=bool, help='videofile mode')
 parser.add_argument('--cam', default=-1, type=int, help='camera device id')
@@ -84,16 +83,20 @@ if cam >= 0 or video:
     video_name = os.path.splitext(video_path)
     fourcc = cv2.VideoWriter_fourcc('m','p','4','v')
     out_video = cv2.VideoWriter(video_name[0] + '_m2det.mp4', fourcc, capture.get(cv2.CAP_PROP_FPS), (int(capture.get(cv2.CAP_PROP_FRAME_WIDTH)), int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))))
-im_fnames = sorted((fname for fname in os.listdir(im_path) if os.path.splitext(fname)[-1] == '.jpg'))
-im_fnames = (os.path.join(im_path, fname) for fname in im_fnames)
-im_iter = iter(im_fnames)
+if os.path.isdir(im_path):
+    im_fnames = sorted((fname for fname in os.listdir(im_path) if os.path.splitext(fname)[-1] in [".jpg", ".png"]))
+    im_fnames = (os.path.join(im_path, fname) for fname in im_fnames)
+    im_iter = iter(im_fnames)
 while True:
     if cam < 0 and not video:
-        try:
-            fname = next(im_iter)
-        except StopIteration:
-            break
-        if 'm2det' in fname: continue # ignore the detected images
+        if os.path.isdir(im_path):
+            try:
+                fname = next(im_iter)
+            except StopIteration:
+                break
+            if 'm2det' in fname: continue # ignore the detected images
+        else:
+            fname = im_path
         image = cv2.imread(fname, cv2.IMREAD_COLOR)
     else:
         ret, image = capture.read()
@@ -122,8 +125,9 @@ while True:
     for i, rect in enumerate(f_rects):
         rect = tuple(map(int, rect.tolist()))
         cv2.rectangle(im2show, pt1=rect[:2], pt2=rect[2:], color=(0,255,0))
-        for landmark in landmarks[i]:
-            cv2.drawMarker(im2show, tuple(map(int, landmark.tolist())), (0,0,255), markerSize=10)
+        if len(landmarks) > 0:
+            for landmark in landmarks[i]:
+                cv2.drawMarker(im2show, tuple(map(int, landmark.tolist())), (0,0,255), markerSize=10)
 
     if im2show.shape[0] > 1100:
         im2show = cv2.resize(im2show,
@@ -140,5 +144,7 @@ while True:
                 break
     if cam < 0 and not video:
         cv2.imwrite('{}_m2det_facenet.jpg'.format(fname.split('.')[0]), im2show)
+        if not os.path.isdir(im_path):
+            break
     else:
         out_video.write(im2show)

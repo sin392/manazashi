@@ -21,7 +21,6 @@ import torch.backends.cudnn as cudnn
 import os,sys,time
 from layers.nn_utils import *
 from torch.nn import init as init
-from utils.core import print_info
 
 class M2Det(nn.Module):
     def __init__(self, phase, size, config = None):
@@ -32,7 +31,6 @@ class M2Det(nn.Module):
         self.phase = phase
         self.size = size
         self.init_params(config)
-        print_info('===> Constructing M2Det model', ['yellow','bold'])
         self.construct_modules()
 
     def init_params(self, config=None): # Directly read the config
@@ -151,7 +149,6 @@ class M2Det(nn.Module):
         if self.backbone == 'vgg16':
             if isinstance(base_model_path, str):
                 base_weights = torch.load(base_model_path)
-                print_info('Loading base network...')
                 self.base.load_state_dict(base_weights)
         elif 'res' in self.backbone:
             pass # pretrained seresnet models are initially loaded when defining them.
@@ -166,7 +163,6 @@ class M2Det(nn.Module):
                 elif key.split('.')[-1] == 'bias':
                     m.state_dict()[key][...] = 0
         
-        print_info('Initializing weights for [tums, reduce, up_reduce, leach, loc, conf]...')
         for i in range(self.num_levels):
             getattr(self,'unet{}'.format(i+1)).apply(weights_init)
         self.reduce.apply(weights_init)
@@ -178,11 +174,9 @@ class M2Det(nn.Module):
     def load_weights(self, base_file):
         other, ext = os.path.splitext(base_file)
         if ext == '.pkl' or '.pth':
-            print_info('Loading weights into state dict...')
             self.load_state_dict(torch.load(base_file))
-            print_info('Finished!')
         else:
-            print_info('Sorry only .pth and .pkl files supported.')
+            pass
 
 def build_net(phase='train', size=320, config = None):
     if not phase in ['test','train']:
