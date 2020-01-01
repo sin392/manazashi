@@ -6,7 +6,7 @@ from torch.multiprocessing import Pool
 import sys
 
 from PIL import Image, ImageDraw
-from facenet_pytorch import MTCNN
+from utils import MTCNN
 import torchvision.transforms as T
 import matplotlib.pyplot as plt
 import torch
