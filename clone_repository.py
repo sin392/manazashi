@@ -33,9 +33,9 @@ def save_response_content(response, destination):
 
 if __name__ == "__main__":
     # prepare face-net
-    if not os.path.exists("facenet_pytorch"):
-        command = ["git", "clone", "https://github.com/timesler/facenet-pytorch.git", "facenet_pytorch"]
-        subprocess.call(command)
+    # if not os.path.exists("facenet_pytorch"):
+    #     command = ["git", "clone", "https://github.com/timesler/facenet-pytorch.git", "facenet_pytorch"]
+    #     subprocess.call(command)
 
     # prepare M2Det
     if not os.path.exists("M2Det"):
@@ -53,9 +53,4 @@ if __name__ == "__main__":
 
         # file_id = 'https://drive.google.com/file/d/1NM1UDdZnwHwiNDxhcP-nndaWj24m-90L/view'
         # destination = 'weights/m2det512_vgg.pth'
-<<<<<<< HEAD
         # download_file_from_google_drive(file_id, destination)
-=======
-        # download_file_from_google_drive(file_id, destination)
-
->>>>>>> origin/master
