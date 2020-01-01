@@ -6,6 +6,8 @@ __pycache__
 /Dataset
 /weights
 /cropped
+preprocessing/input
+preprocessing/output
 
 *.png
 *.jpg
