@@ -1,22 +1,23 @@
 import numpy as np
 import cv2
 from PIL import Image, ImageDraw
-from facenet_pytorch import MTCNN
+from models import MTCNN
 import torchvision.transforms as T
 import matplotlib.pyplot as plt
 import torch
 from torch.multiprocessing import Pool
 import sys
 
-sys.path.append("./M2Det")
-from utils.timer import Timer
-from configs.CC import Config
-from layers.functions import Detect, PriorBox
-from m2det import build_net
-from data import BaseTransform
-from utils.core import *
-from utils.pycocotools.coco import COCO
-from utils.nms_wrapper import nms
+# sys.path.append("./M2Det")
+from M2Det.configs.CC import Config
+from M2Det.layers.functions import Detect, PriorBox
+from M2Det.m2det import build_net
+from M2Det.data import BaseTransform
+from M2Det.utils.core import *
+from M2Det.utils.nms_wrapper import nms
+
+# from utils.pycocotools.coco import COCO
+# from utils.timer import Timer
 
 def make_outlier_criteria(col):
     #arrayに対して標準偏差と平均を算出。
@@ -77,6 +78,9 @@ class PersonFaceDetector():
         # facenet
         self.mtcnn = MTCNN(image_size=512, margin=0, keep_all=True, device=self.device)
 
+        self.person_list = []
+        self.face_list = []
+
     def remove_outlier(self, rects, array):
         areas = (rects[:,2] - rects[:,0]) * (rects[:,3]- rects[:,1])
         outlier_max, outlier_min = make_outlier_criteria(areas)
@@ -84,62 +88,76 @@ class PersonFaceDetector():
         array = np.delete(array, outlier_idx, axis=0)
         return array
     
-    def thresh(self, scores, array, thr=0.2):
-        array = array[scores > thr]
+    def thresh(self, probs, array, thr=0.2):
+        array = array[probs > thr]
         return array
 
     def face_detect(self, img, land=False):
         img_pil = Image.fromarray(img)
         # img.to(self.device)
         if land:
-            face_rects, probs, landmarks = mtcnn.detect(img_pil, landmarks=True)
+            rects, probs, landmarks = self.mtcnn.detect(img_pil, landmarks=True)
         else:
             landmarks = ()
-            face_rects, probs = mtcnn.detect(img_pil, landmarks=False)
-        return face_rects, probs, landmarks
+            rects, probs = self.mtcnn.detect(img_pil, landmarks=False)
+        
+        return rects, probs, landmarks
     
     def person_detect(self, img):
         h,w = img.shape[:2]
         img = self._preprocess(img).unsqueeze(0)
         scale = torch.Tensor([w,h,w,h])
         out = self.m2det(img.to(self.device))
-        boxes, scores = self.detector.forward(out, self.priors)
-        boxes = (boxes[0]*scale).cpu().numpy()
-        scores = scores[0].cpu().numpy()
-        allboxes = []
+        rects, probs = self.detector.forward(out, self.priors)
+        rects = (rects[0]*scale).cpu().numpy()
+        probs = probs[0].cpu().numpy()
+        allinfo = []
         for j in range(1, self.cfg.model.m2det_config.num_classes):
-            inds = np.where(scores[:,j] > self.cfg.test_cfg.score_threshold)[0]
+            inds = np.where(probs[:,j] > self.cfg.test_cfg.score_threshold)[0]
             if len(inds) == 0:
                 continue
-            c_bboxes = boxes[inds]
-            c_scores = scores[inds, j]
-            c_dets = np.hstack((c_bboxes, c_scores[:, np.newaxis])).astype(np.float32, copy=False)
+            c_brects = rects[inds]
+            c_probs = probs[inds, j]
+            c_dets = np.hstack((c_brects, c_probs[:, np.newaxis])).astype(np.float32, copy=False)
             soft_nms = self.cfg.test_cfg.soft_nms
             keep = nms(c_dets, self.cfg.test_cfg.iou, force_cpu = soft_nms) #min_thresh, device_id=0 if cfg.test_cfg.cuda else None)
             keep = keep[:self.cfg.test_cfg.keep_per_class]
             c_dets = c_dets[keep, :]
-            allboxes.extend([_.tolist()+[j] for _ in c_dets])
-            allboxes = np.array(allboxes)
+            allinfo.extend([_.tolist()+[j] for _ in c_dets])
+            allinfo = np.array(allinfo)
 
             # 確率で足きり
-            allboxes = self.thresh(allboxes[:,4], allboxes, thr=0.2)
+            allinfo = self.thresh(allinfo[:,4], allinfo, thr=0.2)
 
             # 面積で大きすぎたり小さすぎたりするbboxをはじく
-            print(allboxes)
-            allboxes = self.remove_outlier(allboxes[:,:4], allboxes)
+            allinfo = self.remove_outlier(allinfo[:,:4], allinfo)
 
-            boxes = allboxes[:,:4]
-            scores = allboxes[:,4]
-            cls_inds = allboxes[:,5]
+            rects = allinfo[:,:4]
+            probs = allinfo[:,4]
+            cls_inds = allinfo[:,5]
 
-            return boxes, scores, cls_inds
+            return rects, probs, cls_inds
+        
+    def get_score(self, f_rects, p_rects):
+        f_num = len(f_rects)
+        p_num = len(p_rects)
+        pf_rate = f_num / p_num * 100
+
+        match_idx_list = []
+        for i in range(f_num):
+            for j in range(p_num):
+                iou = get_iou(f_rects[i], p_rects[j])
+                if 0.5 < iou:
+                    match_idx_list.append(j)
+        
+        return pf_rate, match_idx_list
 
 if __name__ == "__main__":
     img = cv2.imread("sample.png")
     cfg = Config.fromfile("M2Det/configs/m2det512_vgg.py")
     weight = "/content/drive/My Drive/m2det512_vgg.pth"
     pf_detector = PersonFaceDetector(cfg, weight)
-    boxes, scores, cls_inds = pf_detector.person_detect(img)
+    rects, probs, cls_inds = pf_detector.person_detect(img)
     
-    result = np.hstack((boxes, scores[:, np.newaxis]))
+    result = np.hstack((rects, probs[:, np.newaxis]))
     print(result.shape)
