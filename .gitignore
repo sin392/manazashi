@@ -14,3 +14,7 @@ data
 
 # ---- 露木の追記 PyCharmの設定を非共有化 ---- #
 .idea
+
+# ---- preprocessing 使いまーす ---- #
+preprocessing/input
+preprocessing/output
