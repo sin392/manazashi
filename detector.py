@@ -87,6 +87,14 @@ class PersonFaceDetector():
         array = np.delete(array, outlier_idx, axis=0)
         return array
     
+    def length_rest(self, rects, max_length=500):
+        y_min = rects[:,1]
+        y_max = rects[:,3]
+        res = y_max - y_min
+        idxs = np.where(res > max_length)[0]
+        rects[idxs, 3] = rects[idxs, 1] + max_length
+        return rects
+
     def thresh(self, probs, array, thr=0.2):
         array = array[probs > thr]
         return array
@@ -111,7 +119,9 @@ class PersonFaceDetector():
         rects = (rects[0]*scale).cpu().numpy()
         probs = probs[0].cpu().numpy()
         allinfo = []
-        for j in range(1, self.cfg.model.m2det_config.num_classes):
+        # num_classes = self.cfg.model.m2det_config.num_classes
+        num_classes = 2 # person only
+        for j in range(1, num_classes):
             inds = np.where(probs[:,j] > self.cfg.test_cfg.score_threshold)[0]
             if len(inds) == 0:
                 continue
@@ -135,18 +145,23 @@ class PersonFaceDetector():
             probs = allinfo[:,4]
             cls_inds = allinfo[:,5]
 
+            # bboxの縦方向最大長に制限
+            rects = self.length_rest(rects)
+
             return rects, probs, cls_inds
         
     def get_score(self, f_rects, p_rects):
-        f_num = len(f_rects)
-        p_num = len(p_rects)
+        f_num = len(f_rects) if len(f_rects) > 0 else 0
+        p_num = len(p_rects) if len(p_rects) > 0 else 0
         pf_rate = f_num / p_num * 100
 
         match_idx_list = []
         for i in range(f_num):
             for j in range(p_num):
                 iou = get_iou(f_rects[i], p_rects[j])
-                if 0.5 < iou:
+                half = (p_rects[j, 3] - p_rects[j, 1]) / 2
+                above_hh = f_rects[i, 3] <= p_rects[j, 3] - half
+                if 0.5 < iou and above_hh:
                     match_idx_list.append(j)
         
         return pf_rate, match_idx_list
