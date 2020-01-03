@@ -51,7 +51,7 @@ class CV2:
         self.openCamera()
 
     def openCamera(self):
-        self.cap = cv2.VideoCapture(0)
+        self.cap = cv2.VideoCapture('movie.mp4')
 
     def cameraFrame(self):
         _,self.frame=self.cap.read()
