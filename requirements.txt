@@ -1,8 +1,0 @@
-numpy
-requests
-opencv
-pillow
-pytorch
-torchvision
-matplotlib
-Cython
