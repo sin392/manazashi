@@ -1,11 +1,8 @@
 import numpy as np
 import cv2
-from PIL import Image, ImageDraw
+from PIL import Image
 from models import MTCNN
-import torchvision.transforms as T
-import matplotlib.pyplot as plt
 import torch
-from torch.multiprocessing import Pool
 import sys
 
 sys.path.append("M2Det")
@@ -15,9 +12,6 @@ from M2Det.m2det import build_net
 from M2Det.data import BaseTransform
 from M2Det.utils.core import *
 from M2Det.utils.nms_wrapper import nms
-
-# from utils.pycocotools.coco import COCO
-# from utils.timer import Timer
 
 def make_outlier_criteria(col):
     #arrayに対して標準偏差と平均を算出。
@@ -75,7 +69,7 @@ class PersonFaceDetector():
         self.detector = Detect(cfg.model.m2det_config.num_classes, cfg.loss.bkg_label, anchor_config)
         self.m2det = net
         # facenet
-        self.mtcnn = MTCNN(image_size=512, margin=0, thresholds=[0.5, 0.6, 0.6], keep_all=True, device=self.device)
+        self.mtcnn = MTCNN(image_size=512, margin=0, thresholds=[0.55, 0.6, 0.6], keep_all=True, device=self.device)
 
         self.person_list = []
         self.face_list = []
@@ -98,6 +92,11 @@ class PersonFaceDetector():
     def thresh(self, probs, array, thr=0.2):
         array = array[probs > thr]
         return array
+
+    def face_sup(self, f_rects, match_idx_list):
+        idxs = np.unique(np.array([idx[0] for idx in match_idx_list]))
+        f_rects = f_rects[idxs]
+        return f_rects
 
     def face_detect(self, img, land=False):
         img_pil = Image.fromarray(img)
@@ -149,11 +148,10 @@ class PersonFaceDetector():
             rects = self.length_rest(rects)
 
             return rects, probs, cls_inds
-        
-    def get_score(self, f_rects, p_rects):
+
+    def get_match_idx_list(self, f_rects, p_rects):
         f_num = len(f_rects) if len(f_rects) > 0 else 0
         p_num = len(p_rects) if len(p_rects) > 0 else 0
-        pf_rate = f_num / p_num * 100
 
         match_idx_list = []
         for i in range(f_num):
@@ -162,9 +160,15 @@ class PersonFaceDetector():
                 half = (p_rects[j, 3] - p_rects[j, 1]) / 2
                 above_hh = f_rects[i, 3] <= p_rects[j, 3] - half
                 if 0.5 < iou and above_hh:
-                    match_idx_list.append(j)
+                    match_idx_list.append((i,j))
+        return match_idx_list
+
+    def get_score(self, f_rects, p_rects):
+        f_num = len(f_rects) if len(f_rects) > 0 else 0
+        p_num = len(p_rects) if len(p_rects) > 0 else 0
+        pf_rate = f_num / p_num * 100
         
-        return pf_rate, match_idx_list
+        return pf_rate
 
 if __name__ == "__main__":
     img = cv2.imread("sample.png")

@@ -1,26 +1,22 @@
 import os
-import cv2
-import numpy as np
-import time
-from torch.multiprocessing import Pool
 import sys
-
-import torchvision.transforms as T
-import matplotlib.pyplot as plt
-import torch
+import cv2
+import time
 import argparse
+import numpy as np
+from matplotlib import pyplot as plt
 
 from detector import PersonFaceDetector
 from M2Det.configs.CC import Config
-from M2Det.utils.nms.py_cpu_nms import py_cpu_nms
+from M2Det.utils.nms_wrapper import nms
 
-def draw_detection(img, rects, match_idx_list=()):
+def draw_p_det(img, rects, match_idx_list=()):
     imgcv = np.copy(img)
     h, w, _ = imgcv.shape
     for i, box in enumerate(rects):
         color = (255, 176, 0)
         if len(match_idx_list) != 0:
-            if i in match_idx_list:
+            if i in [idx[1] for idx in match_idx_list]:
                 color = (0, 0, 255)
 
         box = [int(_) for _ in box]
@@ -28,6 +24,16 @@ def draw_detection(img, rects, match_idx_list=()):
         cv2.rectangle(imgcv,
                       (box[0], box[1]), (box[2], box[3]),
                       color, thick)
+    return imgcv
+
+def draw_f_det(img, rects, landmarks=()):
+    imgcv = np.copy(img)
+    for i, rect in enumerate(rects):
+        rect = tuple(map(int, rect.tolist()))
+        cv2.rectangle(imgcv, pt1=rect[:2], pt2=rect[2:], color=(0,255,0))
+        if len(landmarks) > 0:
+            for landmark in landmarks[i]:
+                cv2.drawMarker(imgcv, tuple(map(int, landmark.tolist())), (0,0,255), markerSize=10)
     return imgcv
 
 def crop_person(img, rect):
@@ -57,7 +63,9 @@ class DataHandler():
         if cam >= 0 or video:
             video_name = os.path.splitext(video_path)
             fourcc = cv2.VideoWriter_fourcc('m','p','4','v')
-            self.out_video = cv2.VideoWriter(video_name[0] + '_processed.mp4', fourcc, capture.get(cv2.CAP_PROP_FPS), (int(capture.get(cv2.CAP_PROP_FRAME_WIDTH)), int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))))
+            # fps = capture.get(cv2.CAP_PROP_FPS)
+            fps = 1
+            self.out_video = cv2.VideoWriter(video_name[0] + '_processed.mp4', fourcc, fps, (int(capture.get(cv2.CAP_PROP_FRAME_WIDTH)), int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))))
             self.capture = capture
         if os.path.isdir(im_path):
             im_fnames = sorted((fname for fname in os.listdir(im_path) if os.path.splitext(fname)[-1] in [".jpg", ".png"]))
@@ -118,31 +126,56 @@ def get_fixed_rects(imgs):
         p_rects, p_probs, _ = detector.person_detect(img)
         f_rects_probs = np.concatenate((f_rects_probs, np.hstack((f_rects, f_probs[:, np.newaxis]))), axis=0)
         p_rects_probs = np.concatenate((p_rects_probs, np.hstack((p_rects, p_probs[:, np.newaxis]))), axis=0)
-    f_keep = py_cpu_nms(f_rects_probs, 0.5)
-    p_keep = py_cpu_nms(p_rects_probs, 0.5)
+    force_cpu = detector.device == "cpu"
+    f_keep = nms(f_rects_probs, 0.5, force_cpu)
+    p_keep = nms(p_rects_probs, 0.5, force_cpu)
     f_rects = f_rects_probs[f_keep, :4]
     p_rects = p_rects_probs[p_keep, :4]
     return f_rects, p_rects
+
+class AnimationGraph():
+    def __init__(self):
+        self.x = np.zeros(100)
+        self.y = np.zeros(100)
+        fig = plt.figure(figsize=(8, 4))
+        self.line, = plt.plot(self.x, self.y)
+        # plt.xlim(0,100)
+        plt.ylim(0,100)
+        plt.xlabel("time [s]")
+        plt.ylabel("score [f/p]")
+
+        plt.ion()
+
+    def update(self, x, y):
+        self.x = np.append(self.x, x)
+        self.x = np.delete(self.x, 0)
+        self.y = np.append(self.y, y)
+        self.y = np.delete(self.y, 0)
+        self.line.set_data(self.x, self.y)
+        plt.xlim(min(self.x), max(self.x))
+        plt.draw()
+        plt.pause(0.001)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='M2Det Testing')
     parser.add_argument('-c', '--config', default='M2Det/configs/m2det512_vgg.py', type=str)
     parser.add_argument('-f', '--directory', default='sample.png', help='the path to demo images')
-    parser.add_argument('-m', '--trained_model', default='weights/m2det512_vgg.pth', type=str, help='Trained state_dict file path to open')
-    parser.add_argument('--video', default=False, type=bool, help='videofile mode')
+    parser.add_argument('-w', '--weight', default='weights/m2det512_vgg.pth', type=str, help='Trained state_dict file path to open')
     parser.add_argument('--cam', default=-1, type=int, help='camera device id')
+    parser.add_argument('--video', action='store_true', help='videofile mode')
     parser.add_argument('--show', action='store_true', help='Whether to display the images')
     parser.add_argument('--crop', action='store_true', help='Crop Bbox of Person Class')
+    parser.add_argument('--fixed', action='store_true')
     args = parser.parse_args()
-
-    cfg = Config.fromfile(args.config)
-    detector = PersonFaceDetector(cfg, args.trained_model)
 
     im_path = args.directory
     cam = args.cam
     video = args.video
 
+    cfg = Config.fromfile(args.config)
+    detector = PersonFaceDetector(cfg, args.weight)
     handler = DataHandler(im_path, cam, video, args.show)
+    graph = AnimationGraph()
 
     count = 0
     while True:
@@ -155,49 +188,46 @@ if __name__ == "__main__":
             continue
         
         imgs = []
+        start = time.time()
         if count < 5:
             imgs.append(img)
             if count == 4:
                 f_rects, p_rects = get_fixed_rects(imgs)
                 fixed_f_rects, fixed_p_rects = f_rects, p_rects
                 landmarks = ()
-                count += 1
             else:
                 count += 1
                 continue
-
         else:
-            # img = cv2.resize(img, (512, 512))
-            start = time.time()
-            p_rects, p_probs, _ = detector.person_detect(img)
-            print(time.time() - start)
+            if args.fixed:
+                f_rects, p_rects = fixed_f_rects, fixed_p_rects
+            else:
+                p_rects, p_probs, _ = detector.person_detect(img)
             f_rects, f_probs, landmarks = detector.face_detect(img)
-            end = time.time()
-            loop_time = end - start
 
-            print("loop_time", loop_time)
-            # print("p_rects", p_rects)
-            # print("f_rects", f_rects)
-            count += 1
+        end = time.time()
+        print("loop_time", end - start)
 
-        pf_rate, match_idx_list = detector.get_score(f_rects, p_rects)
-            # print(match_idx_list)
-        im2show = draw_detection(img, p_rects, match_idx_list=match_idx_list)
+        match_idx_list = detector.get_match_idx_list(f_rects, p_rects)
+
+        # 顔の誤検出抑制
+        f_rects = detector.face_sup(f_rects, match_idx_list)
+
+        # スコア算出
+        pf_rate = detector.get_score(f_rects, p_rects)
         print("pfrate", pf_rate)
+        # animation
+        graph.update(count, pf_rate)
 
+
+        # 描画
+        im2show = draw_p_det(img, p_rects, match_idx_list=match_idx_list)
+        im2show = draw_f_det(im2show, f_rects, landmarks=landmarks)
         cv2.putText(im2show, f'face/person : {pf_rate:.2f}%', (20, 60), cv2.FONT_HERSHEY_COMPLEX, 2, (100, 255, 100), 5, cv2.LINE_AA)
 
-        for i, rect in enumerate(f_rects):
-            rect = tuple(map(int, rect.tolist()))
-            cv2.rectangle(im2show, pt1=rect[:2], pt2=rect[2:], color=(0,255,0))
-            if len(landmarks) > 0:
-                for landmark in landmarks[i]:
-                    cv2.drawMarker(im2show, tuple(map(int, landmark.tolist())), (0,0,255), markerSize=10)
-        # if count == 5:
-        #     cv2.imwrite("im2show.jpg", im2show)
-
-
-        # 描画・保存
+        # 出力
         state = handler.out(im2show)
         if state == -1:
             break
+    
+        count += 1
