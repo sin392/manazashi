@@ -4,9 +4,11 @@ import cv2
 import time
 import argparse
 import numpy as np
+import matplotlib as mlp
 from matplotlib import pyplot as plt
 
 from detector import PersonFaceDetector
+from gui import GUI
 from M2Det.configs.CC import Config
 from M2Det.utils.nms_wrapper import nms
 
@@ -134,16 +136,18 @@ def get_fixed_rects(imgs):
     return f_rects, p_rects
 
 class AnimationGraph():
-    def __init__(self):
+    def __init__(self, show):
+        if not show:
+            mlp.use("Agg")
         self.x = np.zeros(100)
         self.y = np.zeros(100)
-        fig = plt.figure(figsize=(8, 4))
+        self.fig = plt.figure(figsize=(6, 3))
         self.line, = plt.plot(self.x, self.y)
         # plt.xlim(0,100)
         plt.ylim(0,100)
         plt.xlabel("time [s]")
         plt.ylabel("score [f/p]")
-
+        self.fig.subplots_adjust(bottom=0.2)
         plt.ion()
 
     def update(self, x, y):
@@ -156,6 +160,11 @@ class AnimationGraph():
         plt.draw()
         plt.pause(0.001)
 
+    def convert_fig2array(self):
+        # self.fig.canvas.draw()
+        img = np.array(self.fig.canvas.renderer.buffer_rgba())
+        return img
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='M2Det Testing')
     parser.add_argument('-c', '--config', default='M2Det/configs/m2det512_vgg.py', type=str)
@@ -164,6 +173,7 @@ if __name__ == "__main__":
     parser.add_argument('--cam', default=-1, type=int, help='camera device id')
     parser.add_argument('--video', action='store_true', help='videofile mode')
     parser.add_argument('--show', action='store_true', help='Whether to display the images')
+    parser.add_argument('--gui', action='store_true')
     parser.add_argument('--crop', action='store_true', help='Crop Bbox of Person Class')
     parser.add_argument('--fixed', action='store_true')
     args = parser.parse_args()
@@ -175,10 +185,17 @@ if __name__ == "__main__":
     cfg = Config.fromfile(args.config)
     detector = PersonFaceDetector(cfg, args.weight)
     handler = DataHandler(im_path, cam, video, args.show)
-    graph = AnimationGraph()
+    graph = AnimationGraph(args.show)
+    if args.gui:
+        gui = GUI()
+        gui.root.update()
 
     count = 0
     while True:
+        if args.gui:
+            if gui.pause_flag:
+                gui.root.update()
+                continue
         img, state = handler.get_img()
         if state == -1:
             print("break")
@@ -206,6 +223,7 @@ if __name__ == "__main__":
             f_rects, f_probs, landmarks = detector.face_detect(img)
 
         end = time.time()
+        print(count)
         print("loop_time", end - start)
 
         match_idx_list = detector.get_match_idx_list(f_rects, p_rects)
@@ -223,7 +241,17 @@ if __name__ == "__main__":
         # 描画
         im2show = draw_p_det(img, p_rects, match_idx_list=match_idx_list)
         im2show = draw_f_det(im2show, f_rects, landmarks=landmarks)
-        cv2.putText(im2show, f'face/person : {pf_rate:.2f}%', (20, 60), cv2.FONT_HERSHEY_COMPLEX, 2, (100, 255, 100), 5, cv2.LINE_AA)
+        if not args.gui:
+            cv2.putText(im2show, f'face/person : {pf_rate:.2f}%', (20, 60), cv2.FONT_HERSHEY_COMPLEX, 2, (100, 255, 100), 5, cv2.LINE_AA)
+        else:
+            f_num = len(f_rects) if len(f_rects) > 0 else 0
+            p_num = len(p_rects) if len(p_rects) > 0 else 0
+            fig = graph.convert_fig2array()
+            gui.update_img(gui.graph, fig)
+            gui.update_img(gui.video, im2show[:,:,::-1])
+            gui.update_text(gui.score_1, f"person : {f_num}")
+            gui.update_text(gui.score_2, f"face   : {p_num}")
+            gui.update_text(gui.score_3, f"score  : {pf_rate:.2f}")
 
         # 出力
         state = handler.out(im2show)
@@ -231,3 +259,5 @@ if __name__ == "__main__":
             break
     
         count += 1
+
+    if args.gui: gui.root.mainloop()
