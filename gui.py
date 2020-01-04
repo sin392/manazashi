@@ -1,7 +1,6 @@
 import tkinter as tk
 import numpy as np
 from PIL import Image, ImageTk
-import time
 
 class GUI(tk.Frame):
     def __init__(self):
@@ -12,13 +11,26 @@ class GUI(tk.Frame):
         video.create_text(
             300, 150, text="Video", font=("Helvetica", 18, "bold"), fill="white", justify="center"
         )
-        video.bind("<1>", self.pause_handler)
+        video.bind("<1>", self.pause)
 
         statelist = tk.Canvas(root, width=200, height=300, bg="gray")
         statelist.grid(column=1, row=0, padx=5, pady=2)
+        statelist.pack_propagate(0)
         statelist.create_text(
             100, 150, text="State", font=("Helvetica", 18, "bold"), fill="white", justify="center"
         )
+        bar = tk.Scrollbar(statelist, orient=tk.VERTICAL)
+        bar.pack(side=tk.RIGHT, fill=tk.Y)
+        bar.config(command=statelist.yview)
+        statelist.config(scrollregion=(0,0,800,800))
+        statelist.config(yscrollcommand=bar.set)
+
+        statelist_frame = tk.Frame(statelist, width=180, height=300, bg="")
+        statelist_frame.pack_propagate(0)
+        statelist_frame.pack(side=tk.LEFT)
+
+        pad = tk.Frame(statelist_frame, width=1, height=2, bg="gray")
+        pad.pack(pady=2)
 
         graph = tk.Canvas(root, width=600, height=300, bg="gray")
         graph.grid(column=0, row=1, padx=5, pady=2)
@@ -34,21 +46,45 @@ class GUI(tk.Frame):
         )
         pad = tk.Frame(score, width=1, height=2, bg="gray")
         pad.pack(pady=2)
-        self.score_1 = self.make_label(score, "person")
-        self.score_2 = self.make_label(score, "face")
-        self.score_3 = self.make_label(score, "score")
+        
+        self.label_person = self.make_label(score, "person")
+        self.label_face = self.make_label(score, "face")
+        self.label_score = self.make_label(score, "score")
 
         self.root = root
         self.video = video
         self.graph = graph
+        self.statelist = statelist
+        self.statelist_frame = statelist_frame
+        self.bar = bar
         self.score = score
         # False:run, True:pause
         self.pause_flag = False
 
-    def make_label(self, root, text):
-        label = tk.Label(root, width=20, bg="white", text=text, font="Helvetica", anchor="w")
-        label.pack(pady=2)
+    def set_state(self, num):
+        self.person = []
+        for i in range(num):
+            person_state = "normal"
+            fg = "black"
+            self.person.append(self.make_label(self.statelist_frame, f"person_{i} : {person_state}", fg=fg))
+        self.statelist.create_window((0,0), window=self.statelist_frame, anchor="nw")
+
+
+    def make_label(self, frame, text="", width=20, height=1, bg="white", fg="black"):
+        label = tk.Label(frame, width=width, height=height, bg=bg, fg=fg, text=text, font="Helvetica", anchor="w")
+        label.pack(padx=6, pady=2, fill=tk.X)
         return label
+    
+    def update_state(self, num, match_idx_list):
+        for i in range(num):
+            if i in [idx[1] for idx in match_idx_list]:
+                person_state = "good"
+                fg = "red"
+            else:
+                person_state = "normal"
+                fg = "black"
+            self.person[i]["text"] = f"person_{i} : {person_state}"
+            self.person[i]["fg"] = fg
 
     def update_text(self, label, text):
         label["text"] = text
@@ -60,20 +96,27 @@ class GUI(tk.Frame):
         x = frame.winfo_width()
         y = frame.winfo_height()
         scale = 0.95
-        img = img.resize((int(x*scale),int(y*scale)))
+        img = img.resize((int(x*scale),int(y*scale)), resample=Image.BICUBIC)
         frame.tkimg = ImageTk.PhotoImage(img)
         frame.create_image(x/2, y/2, image=frame.tkimg)
         self.root.update()
 
-    def pause(self):
+    def pause(self, event):
         if not self.pause_flag:
             print("pause")
         else:
             print("restart")
         self.pause_flag = not self.pause_flag    
-    
-    def pause_handler(self, event):
-        self.pause()
+
+    def destroy_child(self,frame, keep_pad=False):
+        children = frame.winfo_children()
+        if keep_pad:
+            start = 1
+        else:
+            start = 0
+        for child in children[start:]:
+            child.pack_forget()
+            # child.destroy()
 
 if __name__ == "__main__":
     img = Image.open("sample_processed.jpg").convert("RGB")

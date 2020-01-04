@@ -96,6 +96,7 @@ class PersonFaceDetector():
     def face_sup(self, f_rects, match_idx_list):
         idxs = np.unique(np.array([idx[0] for idx in match_idx_list]))
         f_rects = f_rects[idxs]
+        self.f_rects = f_rects
         return f_rects
 
     def face_detect(self, img, land=False):
@@ -106,7 +107,8 @@ class PersonFaceDetector():
         else:
             landmarks = ()
             rects, probs = self.mtcnn.detect(img_pil, landmarks=False)
-        
+        self.f_rects = rects
+        self.f_num = len(rects) if len(rects) > 0 else 0
         return rects, probs, landmarks
     
     def person_detect(self, img):
@@ -146,16 +148,14 @@ class PersonFaceDetector():
 
             # bboxの縦方向最大長に制限
             rects = self.length_rest(rects)
-
+            self.p_rects = rects
+            self.p_num = len(rects) if len(rects) > 0 else 0
             return rects, probs, cls_inds
 
     def get_match_idx_list(self, f_rects, p_rects):
-        f_num = len(f_rects) if len(f_rects) > 0 else 0
-        p_num = len(p_rects) if len(p_rects) > 0 else 0
-
         match_idx_list = []
-        for i in range(f_num):
-            for j in range(p_num):
+        for i in range(self.f_num):
+            for j in range(self.p_num):
                 iou = get_iou(f_rects[i], p_rects[j])
                 half = (p_rects[j, 3] - p_rects[j, 1]) / 2
                 above_hh = f_rects[i, 3] <= p_rects[j, 3] - half
@@ -164,10 +164,7 @@ class PersonFaceDetector():
         return match_idx_list
 
     def get_score(self, f_rects, p_rects):
-        f_num = len(f_rects) if len(f_rects) > 0 else 0
-        p_num = len(p_rects) if len(p_rects) > 0 else 0
-        pf_rate = f_num / p_num * 100
-        
+        pf_rate = self.f_num / self.p_num * 100
         return pf_rate
 
 if __name__ == "__main__":

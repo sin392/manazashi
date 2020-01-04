@@ -26,13 +26,16 @@ def draw_p_det(img, rects, match_idx_list=()):
         cv2.rectangle(imgcv,
                       (box[0], box[1]), (box[2], box[3]),
                       color, thick)
+    for i, _ in enumerate(rects):
+        cv2.putText(imgcv, text=str(i), org=(box[0], box[1]),
+                    fontFace=cv2.FONT_HERSHEY_PLAIN, fontScale=1, color=(255,255,255), thickness=2)
     return imgcv
 
 def draw_f_det(img, rects, landmarks=()):
     imgcv = np.copy(img)
     for i, rect in enumerate(rects):
         rect = tuple(map(int, rect.tolist()))
-        cv2.rectangle(imgcv, pt1=rect[:2], pt2=rect[2:], color=(0,255,0))
+        cv2.rectangle(imgcv, pt1=rect[:2], pt2=rect[2:], color=(0,255,0), thickness=2)
         if len(landmarks) > 0:
             for landmark in landmarks[i]:
                 cv2.drawMarker(imgcv, tuple(map(int, landmark.tolist())), (0,0,255), markerSize=10)
@@ -207,11 +210,13 @@ if __name__ == "__main__":
         imgs = []
         start = time.time()
         if count < 5:
+            # 最初の5frameで人物領域をキャリブレーション
             imgs.append(img)
             if count == 4:
                 f_rects, p_rects = get_fixed_rects(imgs)
                 fixed_f_rects, fixed_p_rects = f_rects, p_rects
                 landmarks = ()
+                gui.set_state(detector.p_num)
             else:
                 count += 1
                 continue
@@ -242,16 +247,17 @@ if __name__ == "__main__":
         im2show = draw_p_det(img, p_rects, match_idx_list=match_idx_list)
         im2show = draw_f_det(im2show, f_rects, landmarks=landmarks)
         if not args.gui:
-            cv2.putText(im2show, f'face/person : {pf_rate:.2f}%', (20, 60), cv2.FONT_HERSHEY_COMPLEX, 2, (100, 255, 100), 5, cv2.LINE_AA)
+            cv2.putText(im2show, f'face/person : {pf_rate:.2f}%', (20, 60), cv2.FONT_HERSHEY_PLAIN, 2, (100, 255, 100), 5, cv2.LINE_AA)
         else:
-            f_num = len(f_rects) if len(f_rects) > 0 else 0
-            p_num = len(p_rects) if len(p_rects) > 0 else 0
             fig = graph.convert_fig2array()
             gui.update_img(gui.graph, fig)
             gui.update_img(gui.video, im2show[:,:,::-1])
-            gui.update_text(gui.score_1, f"person : {f_num}")
-            gui.update_text(gui.score_2, f"face   : {p_num}")
-            gui.update_text(gui.score_3, f"score  : {pf_rate:.2f}")
+            gui.update_text(gui.label_person, f"person : {detector.p_num}")
+            gui.update_text(gui.label_face, f"face   : {detector.f_num}")
+            gui.update_text(gui.label_score, f"score  : {pf_rate:.2f}")
+            # State : update_text使ったほうが良い？
+            gui.update_state(detector.p_num, match_idx_list)
+
 
         # 出力
         state = handler.out(im2show)
