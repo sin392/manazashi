@@ -216,7 +216,8 @@ if __name__ == "__main__":
                 f_rects, p_rects = get_fixed_rects(imgs)
                 fixed_f_rects, fixed_p_rects = f_rects, p_rects
                 landmarks = ()
-                gui.set_state(detector.p_num)
+                if args.gui:
+                    gui.set_state(detector.p_num)
             else:
                 count += 1
                 continue
