@@ -68,9 +68,7 @@ class PersonFaceDetector():
         self._preprocess = BaseTransform(cfg.model.input_size, cfg.model.rgb_means, (2, 0, 1))
         self.detector = Detect(cfg.model.m2det_config.num_classes, cfg.loss.bkg_label, anchor_config)
         self.m2det = net
-        # facenet
         self.mtcnn = MTCNN(image_size=512, margin=0, thresholds=[0.55, 0.6, 0.6], keep_all=True, device=self.device)
-
         self.person_list = []
         self.face_list = []
 
@@ -125,8 +123,9 @@ class PersonFaceDetector():
         probs = probs[0].cpu().numpy()
         allinfo = []
         # num_classes = self.cfg.model.m2det_config.num_classes
-        num_classes = 2 # person only
-        for j in range(1, num_classes):
+        # for j in range(1, num_classes):
+        target_classes = [1]
+        for j in target_classes:
             inds = np.where(probs[:,j] > self.cfg.test_cfg.score_threshold)[0]
             if len(inds) == 0:
                 continue
@@ -149,6 +148,8 @@ class PersonFaceDetector():
             rects = allinfo[:,:4]
             probs = allinfo[:,4]
             cls_inds = allinfo[:,5]
+
+            print(cls_inds)
 
             # bboxの縦方向最大長に制限
             rects = self.length_rest(rects)

@@ -26,8 +26,9 @@ def draw_p_det(img, rects, match_idx_list=()):
         cv2.rectangle(imgcv,
                       (box[0], box[1]), (box[2], box[3]),
                       color, thick)
-    for i, _ in enumerate(rects):
-        cv2.putText(imgcv, text=str(i), org=(box[0], box[1]),
+
+    for i, box in enumerate(rects):
+        cv2.putText(imgcv, text=str(i), org=(int(box[0]+5), int(box[1])+15), 
                     fontFace=cv2.FONT_HERSHEY_PLAIN, fontScale=1, color=(255,255,255), thickness=2)
     return imgcv
 
@@ -40,12 +41,6 @@ def draw_f_det(img, rects, landmarks=()):
             for landmark in landmarks[i]:
                 cv2.drawMarker(imgcv, tuple(map(int, landmark.tolist())), (0,0,255), markerSize=10)
     return imgcv
-
-def crop_person(img, rect):
-    rect = list(map(int, rect))
-    # img = np.asarray(img)
-    img_cropped = img[rect[1]:rect[3]+1, rect[0]:rect[2]+1]
-    return img_cropped
 
 class DataHandler():
     def __init__(self, im_path, cam, video, show):
@@ -75,23 +70,23 @@ class DataHandler():
         if os.path.isdir(im_path):
             im_fnames = sorted((fname for fname in os.listdir(im_path) if os.path.splitext(fname)[-1] in [".jpg", ".png"]))
             im_fnames = (os.path.join(im_path, fname) for fname in im_fnames)
-            self.im_iter = iter(im_fnames)
+        else:
+            im_fnames = [im_path]
+        self.im_iter = iter(im_fnames)
 
     def get_img(self):
         # -1: break, 0: sucess, 1: continue
         state = 0
         if self.cam < 0 and not self.video:
-            if os.path.isdir(self.im_path):
-                try:
-                    fname = next(self.im_iter)
-                except StopIteration:
-                    state = -1
+            try:
+                fname = next(self.im_iter)
                 if 'processed' in fname:
                     state = 1 # ignore the detected images
-            else:
-                fname = self.im_path
-            self.fname = fname
-            img = cv2.imread(fname, cv2.IMREAD_COLOR)
+                self.fname = fname
+                img = cv2.imread(fname, cv2.IMREAD_COLOR)
+            except StopIteration:
+                img = None
+                state = -1
         else:
             ret, img = self.capture.read()
             if not ret:
@@ -123,19 +118,20 @@ class DataHandler():
         
         return state
 
-def get_fixed_rects(imgs):
+def get_fixed_rects(imgs, thresh=0.5):
     p_rects_probs = np.empty((0, 5))
     f_rects_probs = np.empty((0, 5))
     for i, img in enumerate(imgs):
         f_rects, f_probs, landmarks = detector.face_detect(img)
-        p_rects, p_probs, _ = detector.person_detect(img)
+        p_rects, p_probs, class_inds = detector.person_detect(img)
         f_rects_probs = np.concatenate((f_rects_probs, np.hstack((f_rects, f_probs[:, np.newaxis]))), axis=0)
         p_rects_probs = np.concatenate((p_rects_probs, np.hstack((p_rects, p_probs[:, np.newaxis]))), axis=0)
     force_cpu = detector.device == "cpu"
-    f_keep = nms(f_rects_probs, 0.5, force_cpu)
-    p_keep = nms(p_rects_probs, 0.5, force_cpu)
+    f_keep = nms(f_rects_probs, thresh, force_cpu)
+    p_keep = nms(p_rects_probs, thresh, force_cpu)
     f_rects = f_rects_probs[f_keep, :4]
     p_rects = p_rects_probs[p_keep, :4]
+
     return f_rects, p_rects
 
 class AnimationGraph():
@@ -177,7 +173,6 @@ if __name__ == "__main__":
     parser.add_argument('--video', action='store_true', help='videofile mode')
     parser.add_argument('--show', action='store_true', help='Whether to display the images')
     parser.add_argument('--gui', action='store_true')
-    parser.add_argument('--crop', action='store_true', help='Crop Bbox of Person Class')
     parser.add_argument('--fixed', action='store_true')
     args = parser.parse_args()
 
@@ -188,11 +183,14 @@ if __name__ == "__main__":
     cfg = Config.fromfile(args.config)
     detector = PersonFaceDetector(cfg, args.weight)
     handler = DataHandler(im_path, cam, video, args.show)
-    graph = AnimationGraph(args.show)
+    if (cam >= 0 or video): graph = AnimationGraph(args.show)
     if args.gui:
         gui = GUI()
         gui.root.update()
 
+    
+    calibration_num = 3 if (cam >= 0 or video) else 0
+    imgs = []
     count = 0
     while True:
         if args.gui:
@@ -207,12 +205,11 @@ if __name__ == "__main__":
             print("continue")
             continue
         
-        imgs = []
         start = time.time()
-        if count < 5:
+        if count < calibration_num:
             # 最初の5frameで人物領域をキャリブレーション
             imgs.append(img)
-            if count == 4:
+            if count == (calibration_num - 1):
                 f_rects, p_rects = get_fixed_rects(imgs)
                 fixed_f_rects, fixed_p_rects = f_rects, p_rects
                 landmarks = ()
@@ -225,7 +222,7 @@ if __name__ == "__main__":
             if args.fixed:
                 f_rects, p_rects = fixed_f_rects, fixed_p_rects
             else:
-                p_rects, p_probs, _ = detector.person_detect(img)
+                p_rects, p_probs, class_inds = detector.person_detect(img)
             f_rects, f_probs, landmarks = detector.face_detect(img)
 
         end = time.time()
@@ -241,7 +238,7 @@ if __name__ == "__main__":
         pf_rate = detector.get_score(f_rects, p_rects)
         print("pfrate", pf_rate)
         # animation
-        graph.update(count, pf_rate)
+        if (cam >= 0 or video): graph.update(count, pf_rate)
 
 
         # 描画
@@ -249,7 +246,7 @@ if __name__ == "__main__":
         im2show = draw_f_det(im2show, f_rects, landmarks=landmarks)
         if not args.gui:
             cv2.putText(im2show, f'face/person : {pf_rate:.2f}%', (20, 60), cv2.FONT_HERSHEY_PLAIN, 2, (100, 255, 100), 5, cv2.LINE_AA)
-        else:
+        elif (cam >= 0 or video):
             fig = graph.convert_fig2array()
             gui.update_img(gui.graph, fig)
             gui.update_img(gui.video, im2show[:,:,::-1])
@@ -264,7 +261,6 @@ if __name__ == "__main__":
         state = handler.out(im2show)
         if state == -1:
             break
-    
         count += 1
 
     if args.gui: gui.root.mainloop()
