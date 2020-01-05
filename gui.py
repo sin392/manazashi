@@ -46,10 +46,6 @@ class GUI(tk.Frame):
         )
         pad = tk.Frame(score, width=1, height=2, bg="gray")
         pad.pack(pady=2)
-        
-        self.label_person = self.make_label(score, "person")
-        self.label_face = self.make_label(score, "face")
-        self.label_score = self.make_label(score, "score")
 
         self.root = root
         self.video = video
@@ -61,12 +57,18 @@ class GUI(tk.Frame):
         # False:run, True:pause
         self.pause_flag = False
 
+    def set_score(self):
+        self.label_person = self.make_label(self.score, "person")
+        self.label_face = self.make_label(self.score, "good")
+        self.label_bad = self.make_label(self.score, "bad")
+        self.label_score = self.make_label(self.score, "score")
+
     def set_state(self, num):
         self.person = []
         for i in range(num):
             person_state = "normal"
             fg = "black"
-            self.person.append(self.make_label(self.statelist_frame, f"person_{i} : {person_state}", fg=fg))
+            self.person.append(self.make_label(self.statelist_frame, f"p_{i} : {person_state}", fg=fg))
         self.statelist.create_window((0,0), window=self.statelist_frame, anchor="nw")
 
 
@@ -75,15 +77,18 @@ class GUI(tk.Frame):
         label.pack(padx=6, pady=2, fill=tk.X)
         return label
     
-    def update_state(self, num, match_idx_list):
+    def update_state(self, num, match_idx_list, sleep_idx_list):
         for i in range(num):
             if i in [idx[1] for idx in match_idx_list]:
-                person_state = "good"
-                fg = "red"
+                person_state = "focusing"
+                fg = "orange red"
+            elif i in sleep_idx_list:
+                person_state = "looking away"
+                fg = "RoyalBlue1"
             else:
                 person_state = "normal"
-                fg = "black"
-            self.person[i]["text"] = f"person_{i} : {person_state}"
+                fg = "green4"
+            self.person[i]["text"] = f"p_{i} : {person_state}"
             self.person[i]["fg"] = fg
 
     def update_text(self, label, text):

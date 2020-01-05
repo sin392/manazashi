@@ -149,8 +149,6 @@ class PersonFaceDetector():
             probs = allinfo[:,4]
             cls_inds = allinfo[:,5]
 
-            print(cls_inds)
-
             # bboxの縦方向最大長に制限
             rects = self.length_rest(rects)
             self.p_rects = rects

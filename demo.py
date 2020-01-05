@@ -12,14 +12,16 @@ from gui import GUI
 from M2Det.configs.CC import Config
 from M2Det.utils.nms_wrapper import nms
 
-def draw_p_det(img, rects, match_idx_list=()):
+def draw_p_det(img, rects, match_idx_list=(), sleep_idx_list=()):
     imgcv = np.copy(img)
     h, w, _ = imgcv.shape
     for i, box in enumerate(rects):
-        color = (255, 176, 0)
+        color = (0, 128, 0)
         if len(match_idx_list) != 0:
             if i in [idx[1] for idx in match_idx_list]:
-                color = (0, 0, 255)
+                color = (0, 50, 255)
+            if i in sleep_idx_list:
+                color = (255, 176, 0)
 
         box = [int(_) for _ in box]
         thick = int((h + w) / 300)
@@ -139,11 +141,12 @@ class AnimationGraph():
         if not show:
             mlp.use("Agg")
         self.x = np.zeros(100)
+        # self.x = np.arange(0,100,1)
         self.y = np.zeros(100)
         self.fig = plt.figure(figsize=(6, 3))
         self.line, = plt.plot(self.x, self.y)
-        # plt.xlim(0,100)
         plt.ylim(0,100)
+        plt.xlim(0,100)
         plt.xlabel("time [s]")
         plt.ylabel("score [f/p]")
         self.fig.subplots_adjust(bottom=0.2)
@@ -155,7 +158,8 @@ class AnimationGraph():
         self.y = np.append(self.y, y)
         self.y = np.delete(self.y, 0)
         self.line.set_data(self.x, self.y)
-        plt.xlim(min(self.x), max(self.x))
+        if self.x[-1] >= 100:
+            plt.xlim(min(self.x), max(self.x))
         plt.draw()
         plt.pause(0.001)
 
@@ -174,6 +178,7 @@ if __name__ == "__main__":
     parser.add_argument('--show', action='store_true', help='Whether to display the images')
     parser.add_argument('--gui', action='store_true')
     parser.add_argument('--fixed', action='store_true')
+    parser.add_argument('--fast', action='store_true')
     args = parser.parse_args()
 
     im_path = args.directory
@@ -188,8 +193,15 @@ if __name__ == "__main__":
         gui = GUI()
         gui.root.update()
 
-    
-    calibration_num = 3 if (cam >= 0 or video) else 0
+    if not args.fast:
+        calibration_num = 3 if (cam >= 0 or video) else 0
+    else:
+        calibration_num = 1 if (cam >= 0 or video) else 0
+
+    prev_condition = np.empty((1,100))
+    sleep_idx_list = []
+    match_idx_list = []
+
     imgs = []
     count = 0
     while True:
@@ -207,13 +219,14 @@ if __name__ == "__main__":
         
         start = time.time()
         if count < calibration_num:
-            # 最初の5frameで人物領域をキャリブレーション
+            # 最初の3frameで人物領域をキャリブレーション
             imgs.append(img)
             if count == (calibration_num - 1):
                 f_rects, p_rects = get_fixed_rects(imgs)
                 fixed_f_rects, fixed_p_rects = f_rects, p_rects
                 landmarks = ()
                 if args.gui:
+                    gui.set_score()
                     gui.set_state(detector.p_num)
             else:
                 count += 1
@@ -231,6 +244,15 @@ if __name__ == "__main__":
 
         match_idx_list = detector.get_match_idx_list(f_rects, p_rects)
 
+        # 過去frameの比較 -> LSTM等に置き換え
+        if args.fixed:
+            if prev_condition.shape[0] == 20:
+                sleep_idx_list = np.where(np.all(prev_condition, axis=0))[0]
+                prev_condition = np.delete(prev_condition, 0, axis=0)
+            # 1:good 0:bad
+            condition = np.array([0 if i in [idx[1] for idx in match_idx_list] else 1 for i in range(detector.p_num)])
+            prev_condition = np.vstack((prev_condition[:, :detector.p_num], condition))
+
         # 顔の誤検出抑制
         f_rects = detector.face_sup(f_rects, match_idx_list)
 
@@ -242,7 +264,7 @@ if __name__ == "__main__":
 
 
         # 描画
-        im2show = draw_p_det(img, p_rects, match_idx_list=match_idx_list)
+        im2show = draw_p_det(img, p_rects, match_idx_list, sleep_idx_list)
         im2show = draw_f_det(im2show, f_rects, landmarks=landmarks)
         if not args.gui:
             cv2.putText(im2show, f'face/person : {pf_rate:.2f}%', (20, 60), cv2.FONT_HERSHEY_PLAIN, 2, (100, 255, 100), 5, cv2.LINE_AA)
@@ -250,11 +272,12 @@ if __name__ == "__main__":
             fig = graph.convert_fig2array()
             gui.update_img(gui.graph, fig)
             gui.update_img(gui.video, im2show[:,:,::-1])
-            gui.update_text(gui.label_person, f"person : {detector.p_num}")
-            gui.update_text(gui.label_face, f"face   : {detector.f_num}")
-            gui.update_text(gui.label_score, f"score  : {pf_rate:.2f}")
+            gui.update_text(gui.label_person, f"person       : {detector.p_num}")
+            gui.update_text(gui.label_face,   f"focusing     : {detector.f_num}")
+            gui.update_text(gui.label_bad,    f"looking away : {len(sleep_idx_list)}")
+            gui.update_text(gui.label_score,  f"score        : {pf_rate:.2f}")
             # State : update_text使ったほうが良い？
-            gui.update_state(detector.p_num, match_idx_list)
+            gui.update_state(detector.p_num, match_idx_list, sleep_idx_list)
 
 
         # 出力
