@@ -108,7 +108,11 @@ class PersonFaceDetector():
             landmarks = ()
             rects, probs = self.mtcnn.detect(img_pil, landmarks=False)
         self.f_rects = rects
-        self.f_num = len(rects) if len(rects) > 0 else 0
+        try:
+            self.f_num = len(rects)
+        except:
+            self.f_num = 0
+
         return rects, probs, landmarks
     
     def person_detect(self, img):
@@ -149,7 +153,11 @@ class PersonFaceDetector():
             # bboxの縦方向最大長に制限
             rects = self.length_rest(rects)
             self.p_rects = rects
-            self.p_num = len(rects) if len(rects) > 0 else 0
+            try:
+                self.p_num = len(rects)
+            except:
+                self.p_num = 0
+
             return rects, probs, cls_inds
 
     def get_match_idx_list(self, f_rects, p_rects):
