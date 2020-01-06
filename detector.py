@@ -69,8 +69,10 @@ class PersonFaceDetector():
         self.detector = Detect(cfg.model.m2det_config.num_classes, cfg.loss.bkg_label, anchor_config)
         self.m2det = net
         self.mtcnn = MTCNN(image_size=512, margin=0, thresholds=[0.55, 0.6, 0.6], keep_all=True, device=self.device)
-        self.person_list = []
-        self.face_list = []
+
+        self.f_num = 0
+        self.p_num = 0
+        self.prev_condition = np.empty((1,100))
 
     def remove_outlier(self, rects, array):
         areas = (rects[:,2] - rects[:,0]) * (rects[:,3]- rects[:,1])
@@ -94,7 +96,6 @@ class PersonFaceDetector():
     def face_sup(self, f_rects, match_idx_list):
         idxs = np.unique(np.array([idx[0] for idx in match_idx_list]))
         f_rects = f_rects[idxs]
-        self.f_rects = f_rects
         return f_rects
 
     def face_detect(self, img, land=False):
@@ -105,7 +106,6 @@ class PersonFaceDetector():
         else:
             landmarks = ()
             rects, probs = self.mtcnn.detect(img_pil, landmarks=False)
-        self.f_rects = rects
         try:
             self.f_num = len(rects)
         except:
@@ -151,7 +151,6 @@ class PersonFaceDetector():
 
             # bboxの縦方向最大長に制限
             rects = self.length_rest(rects)
-            self.p_rects = rects
             try:
                 self.p_num = len(rects)
             except:
@@ -169,6 +168,16 @@ class PersonFaceDetector():
                 if 0.5 < iou and above_hh:
                     match_idx_list.append((i,j))
         return match_idx_list
+    
+    def get_sleep_idx_list(self, match_idx_list, frames=20):
+        sleep_idx_list = []
+        if self.prev_condition.shape[0] == frames:
+            sleep_idx_list = np.where(np.all(self.prev_condition, axis=0))[0]
+            self.prev_condition = np.delete(self.prev_condition, 0, axis=0)
+        # 1:good 0:bad
+        condition = np.array([0 if i in [idx[1] for idx in match_idx_list] else 1 for i in range(self.p_num)])
+        self.prev_condition = np.vstack((self.prev_condition[:, :self.p_num], condition))
+        return sleep_idx_list
 
     def get_score(self, f_rects, p_rects):
         pf_rate = self.f_num / self.p_num * 100

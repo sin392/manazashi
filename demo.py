@@ -20,6 +20,7 @@ def draw_p_det(img, rects, match_idx_list=(), sleep_idx_list=()):
         if len(match_idx_list) != 0:
             if i in [idx[1] for idx in match_idx_list]:
                 color = (0, 50, 255)
+        if len(sleep_idx_list) != 0:
             if i in sleep_idx_list:
                 color = (255, 176, 0)
 
@@ -45,7 +46,8 @@ def draw_f_det(img, rects, landmarks=()):
     return imgcv
 
 class DataHandler():
-    def __init__(self, im_path, cam, video, show):
+    def __init__(self, im_path, cam, video_path, show):
+        video = (type(video_path) != None)
         self.im_path = im_path
         self.cam = cam
         self.video = video
@@ -56,7 +58,7 @@ class DataHandler():
             video_path = './cam'
         if video:
             while True:
-                video_path = input('Please enter video path: ')
+                # video_path = input('Please enter video path: ')
                 capture = cv2.VideoCapture(video_path)
                 if capture.isOpened():
                     break
@@ -164,49 +166,46 @@ class AnimationGraph():
         plt.pause(0.001)
 
     def convert_fig2array(self):
-        # self.fig.canvas.draw()
         img = np.array(self.fig.canvas.renderer.buffer_rgba())
         return img
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='M2Det Testing')
     parser.add_argument('-c', '--config', default='M2Det/configs/m2det512_vgg.py', type=str)
-    parser.add_argument('-f', '--directory', default='sample.png', help='the path to demo images')
+    parser.add_argument('-i', '--image', default='sample.png', help='the path to demo images')
     parser.add_argument('-w', '--weight', default='weights/m2det512_vgg.pth', type=str, help='Trained state_dict file path to open')
+    parser.add_argument('-v', '--video', default=None, type=str, help='the path to video file')
     parser.add_argument('--cam', default=-1, type=int, help='camera device id')
-    parser.add_argument('--video', action='store_true', help='videofile mode')
     parser.add_argument('--show', action='store_true', help='Whether to display the images')
     parser.add_argument('--gui', action='store_true')
     parser.add_argument('--fixed', action='store_true')
     parser.add_argument('--fast', action='store_true')
     args = parser.parse_args()
 
-    im_path = args.directory
+    im_path = args.image
     cam = args.cam
-    video = args.video
+    video_path = args.video
+    video = (type(args.video) != None)
 
     cfg = Config.fromfile(args.config)
     detector = PersonFaceDetector(cfg, args.weight)
-    handler = DataHandler(im_path, cam, video, args.show)
+    handler = DataHandler(im_path, cam, video_path, args.show)
     if (cam >= 0 or video): graph = AnimationGraph(args.show)
     if args.gui:
         gui = GUI()
         gui.root.update()
 
-    if not args.fast:
-        calibration_num = 3 if (cam >= 0 or video) else 0
+    if cam >= 0 or video:
+        calibration_num = 1 if args.fast else 3
     else:
-        calibration_num = 1 if (cam >= 0 or video) else 0
-
-    prev_condition = np.empty((1,100))
-    sleep_idx_list = []
-    match_idx_list = []
+        calibration_num = 0
 
     imgs = []
     count = 0
     while True:
         if args.gui:
             if gui.pause_flag:
+                # 一時停止中の処理
                 gui.root.update()
                 continue
         img, state = handler.get_img()
@@ -242,16 +241,15 @@ if __name__ == "__main__":
         print(count)
         print("loop_time", end - start)
 
+        # 顔bboxと人物bboxが両方検出されたもののリスト [..., (i,j), ...]
         match_idx_list = detector.get_match_idx_list(f_rects, p_rects)
 
         # 過去frameの比較 -> LSTM等に置き換え
         if args.fixed:
-            if prev_condition.shape[0] == 20:
-                sleep_idx_list = np.where(np.all(prev_condition, axis=0))[0]
-                prev_condition = np.delete(prev_condition, 0, axis=0)
-            # 1:good 0:bad
-            condition = np.array([0 if i in [idx[1] for idx in match_idx_list] else 1 for i in range(detector.p_num)])
-            prev_condition = np.vstack((prev_condition[:, :detector.p_num], condition))
+            # 数フレーム顔が未検出状態の人物bboxのidリスト [..., j, ...]
+            sleep_idx_list = detector.get_sleep_idx_list(match_idx_list)
+        else:
+            sleep_idx_list = []
 
         # 顔の誤検出抑制
         f_rects = detector.face_sup(f_rects, match_idx_list)
@@ -261,7 +259,6 @@ if __name__ == "__main__":
         print("pfrate", pf_rate)
         # animation
         if (cam >= 0 or video): graph.update(count, pf_rate)
-
 
         # 描画
         im2show = draw_p_det(img, p_rects, match_idx_list, sleep_idx_list)
@@ -278,7 +275,6 @@ if __name__ == "__main__":
             gui.update_text(gui.label_score,  f"score        : {pf_rate:.2f}")
             # State : update_text使ったほうが良い？
             gui.update_state(detector.p_num, match_idx_list, sleep_idx_list)
-
 
         # 出力
         state = handler.out(im2show)
