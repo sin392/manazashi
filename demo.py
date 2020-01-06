@@ -193,7 +193,6 @@ if __name__ == "__main__":
     if (cam >= 0 or video): graph = AnimationGraph(args.show)
     if args.gui:
         gui = GUI()
-        gui.root.update()
 
     if cam >= 0 or video:
         calibration_num = 1 if args.fast else 3
@@ -245,11 +244,8 @@ if __name__ == "__main__":
         match_idx_list = detector.get_match_idx_list(f_rects, p_rects)
 
         # 過去frameの比較 -> LSTM等に置き換え
-        if args.fixed:
-            # 数フレーム顔が未検出状態の人物bboxのidリスト [..., j, ...]
-            sleep_idx_list = detector.get_sleep_idx_list(match_idx_list)
-        else:
-            sleep_idx_list = []
+        # 数フレーム顔が未検出状態の人物bboxのidリスト [..., j, ...]
+        sleep_idx_list = detector.get_sleep_idx_list(match_idx_list) if args.fixed else []
 
         # 顔の誤検出抑制
         f_rects = detector.face_sup(f_rects, match_idx_list)
