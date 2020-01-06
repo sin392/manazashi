@@ -87,7 +87,7 @@ class GUI(tk.Frame):
     def update_state(self, num, match_idx_list, sleep_idx_list):
         self.statelist.delete("state")
         self.statelist.create_window((5,2), window=self.statelist_frame, anchor="nw", tag="state")
-        for i in range(1):
+        for i in range(num):
             if i in [idx[1] for idx in match_idx_list]:
                 person_state = "focusing"
                 fg = "orange red"
